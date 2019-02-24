@@ -1,4 +1,5 @@
-from mock import Mock
+import mock
+
 from pamqp import ContentHeader
 from pamqp import specification
 from pamqp.body import ContentBody
@@ -47,7 +48,7 @@ class ChannelFrameTests(TestFramework):
 
     def test_channel_cancel_ok_frame(self):
         tag = 'travis-ci'
-        channel = Channel(0, Mock(name='Connection'), rpc_timeout=1)
+        channel = Channel(0, mock.Mock(name='Connection'), rpc_timeout=1)
         channel.add_consumer_tag(tag)
 
         channel.on_frame(specification.Basic.CancelOk(tag))
@@ -56,7 +57,7 @@ class ChannelFrameTests(TestFramework):
 
     def test_channel_consume_ok_frame(self):
         tag = 'travis-ci'
-        channel = Channel(0, Mock(name='Connection'), rpc_timeout=1)
+        channel = Channel(0, mock.Mock(name='Connection'), rpc_timeout=1)
 
         channel.on_frame(specification.Basic.ConsumeOk(tag))
 

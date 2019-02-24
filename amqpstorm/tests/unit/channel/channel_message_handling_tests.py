@@ -1,6 +1,6 @@
+import mock
 import threading
 
-from mock import Mock
 from pamqp import ContentHeader
 from pamqp import specification
 from pamqp.body import ContentBody
@@ -14,7 +14,7 @@ from amqpstorm.tests.utility import TestFramework
 
 class ChannelBuildMessageTests(TestFramework):
     def test_channel_build_message(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message.encode('utf-8')
         message_len = len(message)
@@ -30,7 +30,7 @@ class ChannelBuildMessageTests(TestFramework):
         self.assertEqual(result.body, message)
 
     def test_channel_build_message_auto_decode(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message.encode('utf-8')
         message_len = len(message)
@@ -46,7 +46,7 @@ class ChannelBuildMessageTests(TestFramework):
         self.assertEqual(result.body, message.decode('utf-8'))
 
     def test_channel_build_out_of_order_message_deliver(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message
         message_len = len(message)
@@ -62,7 +62,7 @@ class ChannelBuildMessageTests(TestFramework):
                       self.get_last_log())
 
     def test_channel_build_out_of_order_message_header(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message
         message_len = len(message)
@@ -79,7 +79,7 @@ class ChannelBuildMessageTests(TestFramework):
                       self.get_last_log())
 
     def test_channel_build_message_headers(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         deliver = specification.Basic.Deliver()
         header = ContentHeader(body_size=10)
@@ -92,7 +92,7 @@ class ChannelBuildMessageTests(TestFramework):
         self.assertEqual(result[1].body_size, 10)
 
     def test_channel_build_message_headers_out_of_order(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         deliver = specification.Basic.Deliver()
         header = ContentHeader(body_size=10)
@@ -112,7 +112,7 @@ class ChannelBuildMessageTests(TestFramework):
                       self.get_last_log())
 
     def test_channel_build_message_headers_empty(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
         channel._inbound = []
         self.assertRaises(IndexError, channel._build_message_headers)
 
@@ -152,7 +152,7 @@ class ChannelBuildMessageTests(TestFramework):
                           channel._build_message_body, 128)
 
     def test_channel_build_message_body(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message.encode('utf-8')
         message_len = len(message)
@@ -164,7 +164,7 @@ class ChannelBuildMessageTests(TestFramework):
         self.assertEqual(message, result)
 
     def test_channel_build_message_body_break_on_none_value(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message
         message_len = len(message)
@@ -176,7 +176,7 @@ class ChannelBuildMessageTests(TestFramework):
         self.assertEqual(result, b'')
 
     def test_channel_build_message_body_break_on_empty_value(self):
-        channel = Channel(0, Mock(name='Connection'), 360)
+        channel = Channel(0, mock.Mock(name='Connection'), 360)
 
         message = self.message
         message_len = len(message)

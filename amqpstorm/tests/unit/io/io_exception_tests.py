@@ -1,6 +1,4 @@
-import select
 import socket
-from errno import EINTR
 from errno import EWOULDBLOCK
 
 import mock
@@ -8,8 +6,8 @@ import mock
 from amqpstorm import AMQPConnectionError
 from amqpstorm import compatibility
 from amqpstorm.io import IO
-from amqpstorm.io import Poller
 from amqpstorm.tests.utility import FakeConnection
+from amqpstorm.tests.utility import FakePoller
 from amqpstorm.tests.utility import TestFramework
 
 
@@ -67,6 +65,7 @@ class IOExceptionTests(TestFramework):
         io = IO(connection.parameters)
         io._exceptions = []
         io.socket = mock.Mock(name='socket', spec=socket.socket)
+        io.poller = FakePoller()
         io.socket.send.side_effect = socket.error('error')
         io.write_to_socket(self.message)
 
@@ -86,6 +85,7 @@ class IOExceptionTests(TestFramework):
         io._exceptions = []
         io.socket = mock.Mock(name='socket', spec=socket.socket)
         io.socket.send.side_effect = custom_raise
+        io.poller = FakePoller()
         io.write_to_socket(self.message)
 
         self.assertTrue(self.raised)
@@ -105,6 +105,7 @@ class IOExceptionTests(TestFramework):
         io._exceptions = []
         io.socket = mock.Mock(name='socket', spec=socket.socket)
         io.socket.send.side_effect = custom_raise
+        io.poller = FakePoller()
         io.write_to_socket(self.message)
 
         self.assertTrue(self.raised)
@@ -162,21 +163,6 @@ class IOExceptionTests(TestFramework):
             io._get_socket_addresses
         )
 
-    @mock.patch('amqpstorm.io.select.select',
-                side_effect=select.error('travis-ci'))
-    def test_io_poller_raises(self, _):
-        exceptions = []
-        poller = Poller(0, exceptions, 30)
-        self.assertFalse(poller.is_ready)
-        self.assertTrue(exceptions)
-
-    @mock.patch('amqpstorm.io.select.select', side_effect=select.error(EINTR))
-    def test_io_poller_eintr(self, _):
-        exceptions = []
-        poller = Poller(0, exceptions, 30)
-        self.assertFalse(poller.is_ready)
-        self.assertFalse(exceptions)
-
     def test_io_simple_receive_when_socket_not_set(self):
         connection = FakeConnection()
         io = IO(connection.parameters, exceptions=connection.exceptions)
@@ -188,32 +174,4 @@ class IOExceptionTests(TestFramework):
             AMQPConnectionError,
             'connection/socket error',
             connection.check_for_errors
-        )
-
-    def test_io_socket_read_fails(self):
-        connection = FakeConnection()
-        parameters = FakeConnection().parameters
-        parameters['ssl'] = False
-        io = IO(parameters, exceptions=connection.exceptions)
-
-        self.assertFalse(io.use_ssl)
-
-        self.assertRaisesRegexp(
-            socket.error,
-            'connection/socket error',
-            io._read_from_socket
-        )
-
-    def test_io_socket_read_fails_with_ssl(self):
-        connection = FakeConnection()
-        parameters = FakeConnection().parameters
-        parameters['ssl'] = True
-        io = IO(parameters, exceptions=connection.exceptions)
-
-        self.assertTrue(io.use_ssl)
-
-        self.assertRaisesRegexp(
-            socket.error,
-            'connection/socket error',
-            io._read_from_socket
         )

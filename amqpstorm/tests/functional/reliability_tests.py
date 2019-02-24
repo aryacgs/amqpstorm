@@ -19,7 +19,7 @@ from amqpstorm.tests.utility import setup
 class ReliabilityFunctionalTests(TestFunctionalFramework):
     @setup(new_connection=False, queue=True)
     def test_functional_open_new_connection_loop(self):
-        for _ in range(25):
+        for _ in range(100):
             self.connection = self.connection = Connection(HOST, USERNAME,
                                                            PASSWORD)
             self.channel = self.connection.channel()
@@ -46,7 +46,7 @@ class ReliabilityFunctionalTests(TestFunctionalFramework):
     @setup(new_connection=False, queue=True)
     def test_functional_open_close_connection_loop(self):
         self.connection = Connection(HOST, USERNAME, PASSWORD, lazy=True)
-        for _ in range(25):
+        for _ in range(100):
             self.connection.open()
             channel = self.connection.channel()
 
@@ -165,8 +165,8 @@ class ReliabilityFunctionalTests(TestFunctionalFramework):
             imp.reload(compatibility)
 
 
-class PublishAndConsume5kTest(TestFunctionalFramework):
-    messages_to_send = 5000
+class PublishAndConsume10kTest(TestFunctionalFramework):
+    messages_to_send = 10000
     messages_consumed = 0
     lock = threading.Lock()
 
@@ -194,7 +194,7 @@ class PublishAndConsume5kTest(TestFunctionalFramework):
             self.messages_consumed += 1
 
     @setup(queue=True)
-    def test_functional_publish_and_consume_5k_messages(self):
+    def test_functional_publish_and_consume_10k_messages(self):
         self.channel.queue.declare(self.queue_name)
 
         publish_thread = threading.Thread(target=self.publish_messages, )
@@ -221,7 +221,7 @@ class PublishAndConsume5kTest(TestFunctionalFramework):
 
 
 class PublishAndConsumeUntilEmptyTest(TestFunctionalFramework):
-    messages_to_send = 1000
+    messages_to_send = 5000
 
     def configure(self):
         self.disable_logging_validation()

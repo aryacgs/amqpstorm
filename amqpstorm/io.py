@@ -5,7 +5,6 @@ import select
 import socket
 import threading
 from errno import EAGAIN
-from errno import EINTR
 from errno import EWOULDBLOCK
 
 from amqpstorm import compatibility
@@ -15,40 +14,27 @@ from amqpstorm.exception import AMQPConnectionError
 
 EMPTY_BUFFER = bytes()
 LOGGER = logging.getLogger(__name__)
-POLL_TIMEOUT = 1.0
+POLL_TIMEOUT = 0.1
 
 
 class Poller(object):
-    """Socket Read Poller."""
+    """Simple Socket Poller implementation."""
 
-    def __init__(self, fileno, exceptions, timeout=5):
-        self.select = select
-        self._fileno = fileno
-        self._exceptions = exceptions
-        self.timeout = timeout
+    def __init__(self, fd):
+        self.read = ((fd,), (), (), POLL_TIMEOUT)
+        self.write = ((fd,), (fd,), (fd,), POLL_TIMEOUT)
 
     @property
-    def fileno(self):
-        """Socket Fileno.
-
-        :return:
-        """
-        return self._fileno
+    def ready_to_write(self):
+        _, wlist, xlist = select.select(*self.write)
+        if xlist:
+            raise socket.error('connection/socket error')
+        return wlist
 
     @property
-    def is_ready(self):
-        """Is Socket Ready.
-
-        :rtype: tuple
-        """
-        try:
-            ready, _, _ = self.select.select([self.fileno], [], [],
-                                             POLL_TIMEOUT)
-            return bool(ready)
-        except self.select.error as why:
-            if why.args[0] != EINTR:
-                self._exceptions.append(AMQPConnectionError(why))
-        return False
+    def ready_to_read(self):
+        rlist, _, _ = select.select(*self.read)
+        return rlist
 
 
 class IO(object):
@@ -56,8 +42,6 @@ class IO(object):
 
     def __init__(self, parameters, exceptions=None, on_read_impl=None):
         self._exceptions = exceptions
-        self._wr_lock = threading.Lock()
-        self._rd_lock = threading.Lock()
         self._inbound_thread = None
         self._on_read_impl = on_read_impl
         self._running = threading.Event()
@@ -72,20 +56,14 @@ class IO(object):
 
         :return:
         """
-        self._wr_lock.acquire()
-        self._rd_lock.acquire()
-        try:
-            self._running.clear()
-            if self.socket:
-                self._close_socket()
-            if self._inbound_thread:
-                self._inbound_thread.join(timeout=self._parameters['timeout'])
-            self._inbound_thread = None
-            self.poller = None
-            self.socket = None
-        finally:
-            self._wr_lock.release()
-            self._rd_lock.release()
+        self._running.clear()
+        if self._inbound_thread:
+            self._inbound_thread.join()
+        if self.socket:
+            self._close_socket()
+        self._inbound_thread = None
+        self.poller = None
+        self.socket = None
 
     def open(self):
         """Open Socket and establish a connection.
@@ -94,19 +72,12 @@ class IO(object):
                                      encountered an error.
         :return:
         """
-        self._wr_lock.acquire()
-        self._rd_lock.acquire()
-        try:
-            self.data_in = EMPTY_BUFFER
-            self._running.set()
-            sock_addresses = self._get_socket_addresses()
-            self.socket = self._find_address_and_connect(sock_addresses)
-            self.poller = Poller(self.socket.fileno(), self._exceptions,
-                                 timeout=self._parameters['timeout'])
-            self._inbound_thread = self._create_inbound_thread()
-        finally:
-            self._wr_lock.release()
-            self._rd_lock.release()
+        self.data_in = EMPTY_BUFFER
+        self._running.set()
+        sock_addresses = self._get_socket_addresses()
+        self.socket = self._find_address_and_connect(sock_addresses)
+        self.poller = Poller(self.socket)
+        self._inbound_thread = self._create_inbound_thread()
 
     def write_to_socket(self, frame_data):
         """Write data to the socket.
@@ -114,29 +85,27 @@ class IO(object):
         :param str frame_data:
         :return:
         """
-        self._wr_lock.acquire()
-        try:
-            total_bytes_written = 0
-            bytes_to_send = len(frame_data)
-            while total_bytes_written < bytes_to_send:
-                try:
-                    if not self.socket:
-                        raise socket.error('connection/socket error')
-                    bytes_written = (
-                        self.socket.send(frame_data[total_bytes_written:])
-                    )
-                    if bytes_written == 0:
-                        raise socket.error('connection/socket error')
-                    total_bytes_written += bytes_written
-                except socket.timeout:
-                    pass
-                except socket.error as why:
-                    if why.args[0] in (EWOULDBLOCK, EAGAIN):
-                        continue
-                    self._exceptions.append(AMQPConnectionError(why))
-                    return
-        finally:
-            self._wr_lock.release()
+        total_bytes_written = 0
+        bytes_to_send = len(frame_data)
+        while total_bytes_written < bytes_to_send:
+            try:
+                if not self.socket:
+                    raise socket.error('connection/socket error')
+                if not self.poller.ready_to_write:
+                    continue
+                bytes_written = (
+                    self.socket.send(frame_data[total_bytes_written:])
+                )
+                if bytes_written == 0:
+                    raise socket.error('connection/socket error')
+                total_bytes_written += bytes_written
+            except socket.timeout:
+                pass
+            except socket.error as why:
+                if why.args[0] in (EWOULDBLOCK, EAGAIN):
+                    continue
+                self._exceptions.append(AMQPConnectionError(why))
+                return
 
     def _close_socket(self):
         """Shutdown and close the Socket.
@@ -236,7 +205,7 @@ class IO(object):
         :return:
         """
         while self._running.is_set():
-            if self.poller.is_ready:
+            if self.poller.ready_to_read:
                 self.data_in += self._receive()
                 self.data_in = self._on_read_impl(self.data_in)
 
@@ -250,7 +219,9 @@ class IO(object):
         """
         data_in = EMPTY_BUFFER
         try:
-            data_in = self._read_from_socket()
+            if not self.socket:
+                raise socket.error('connection/socket error')
+            return self.socket.recv(MAX_FRAME_SIZE)
         except socket.timeout:
             pass
         except (IOError, OSError) as why:
@@ -258,18 +229,3 @@ class IO(object):
                 self._exceptions.append(AMQPConnectionError(why))
                 self._running.clear()
         return data_in
-
-    def _read_from_socket(self):
-        """Read data from the socket.
-
-        :rtype: bytes
-        """
-        if not self.use_ssl:
-            if not self.socket:
-                raise socket.error('connection/socket error')
-            return self.socket.recv(MAX_FRAME_SIZE)
-
-        with self._rd_lock:
-            if not self.socket:
-                raise socket.error('connection/socket error')
-            return self.socket.read(MAX_FRAME_SIZE)

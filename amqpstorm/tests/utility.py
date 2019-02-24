@@ -112,6 +112,23 @@ class FakePayload(object):
         self.value = value
 
 
+class FakePoller(object):
+    """Fake Poller for Unit-Testing."""
+    def __init__(self):
+        self.rhits = 0
+        self.whits = 0
+
+    @property
+    def ready_to_write(self):
+        self.whits += 1
+        return self.whits % 4 == 0
+
+    @property
+    def ready_to_read(self):
+        self.rhits += 1
+        return self.rhits % 4 == 0
+
+
 class FakeFrame(object):
     """Fake Frame for Unit-Testing."""
     __slots__ = ['name', '_data_1']
